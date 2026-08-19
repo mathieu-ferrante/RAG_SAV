@@ -1,0 +1,5 @@
+docling
+pandas
+openpyxl
+tabulate
+langchain-core
