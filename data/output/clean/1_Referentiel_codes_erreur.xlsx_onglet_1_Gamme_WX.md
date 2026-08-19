@@ -1,0 +1,16 @@
+--- DOCUMENT EXCEL : Referentiel_codes_erreur.xlsx ---
+--- FEUILLE N°1 : Gamme WX ---
+
+| Référentiel des codes erreur — Lave-linge serie WX | Unnamed: 1 | Unnamed: 2 | Unnamed: 3 | Unnamed: 4 |
+|:--------------------------------------------------------------------------------|:-------------------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------------------------------|:-------------------------------------------------------------------------------|:-----------------------------------------------|
+| Version 2025-T4 (arrêtée au 15 décembre 2025) — maintenu par le bureau d'études | | | | |
+| | | | | |
+| Code | Signification | Conduite à tenir (client) | Intervention SAV (technicien) | Modèles concernés |
+| E01 | Porte mal verrouillée | Vérifier qu'aucun linge n'est coincé dans le joint, refermer fermement la porte et relancer le programme. | Si persistant : verrou de porte a contrôler (pièce 44-0812). | WX-300, WX-350, WX-400, WX-450, WX-500, WX-550 |
+| E10 | Pression d'arrivée d'eau insuffisante | Vérifier que le robinet est ouvert a fond et que le tuyau d'arrivée n'est pas plie. Nettoyer le filtre d'entree situe au raccord du tuyau. | Contrôler l'électrovanne d'admission (pièce 44-1103). | WX-300, WX-350, WX-400, WX-450, WX-500, WX-550 |
+| E20 | Vidange trop lente | Nettoyer le filtre de vidange (voir chapitre Entretien) et verifier que le tuyau d'évacuation n'est pas obstrué ni place a plus de 1 m de hauteur. | Contrôler la durite cuve-pompe. | WX-300, WX-350, WX-400, WX-450, WX-500, WX-550 |
+| E23 | Défaut de la pompe de vidange | Nettoyer le filtre de vidange puis relancer un programme Vidange seule. Si le code réapparaît, contacter le SAV : la pompe doit etre controlee par un technicien. | Tester la pompe de vidange (pièce 44-2050), contrôler le connecteur J4. | WX-300, WX-350, WX-400, WX-450, WX-500, WX-550 |
+| E31 | Balourd détecté - charge mal répartie | Répartir le linge dans le tambour. Éviter de laver une pièce lourde seule (couette, tapis de bain). | Si persistant a vide : capteur de balourd a contrôler. | WX-300, WX-350, WX-400, WX-450, WX-500, WX-550 |
+| E40 | Défaut moteur | Débrancher l'appareil 10 minutes puis relancer. Si le code réapparaît, contacter le SAV. | Contrôler charbons (moteur standard) ou carte de puissance (moteur induction). | WX-300, WX-350, WX-400, WX-450, WX-500, WX-550 |
+| E52 | Sonde de température de lavage défectueuse | Contacter le SAV. L'appareil peut continuer a laver a froid en attendant l'intervention. | Remplacer la sonde CTN (pièce 44-3311). | WX-300, WX-350, WX-400, WX-450, WX-500, WX-550 |
+| E60 | Défaut de communication carte electronique | Débrancher l'appareil 10 minutes puis relancer. Si le code réapparaît, contacter le SAV. | Reflasher ou remplacer le module de commande. | WX-300, WX-350, WX-400, WX-450, WX-500, WX-550 |
