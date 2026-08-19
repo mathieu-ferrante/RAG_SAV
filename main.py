@@ -1,8 +1,8 @@
 from pathlib import Path
 from langchain_core.documents import Document
 
-from normalisation import charger_excel, charger_avec_docling
-from nettoyage import nettoyer_texte
+from RAG.normalisation import charger_excel, charger_avec_docling
+from RAG.nettoyage import nettoyer_document_langchain
 
 # -------------------------------------------------------------
 # DOSSIERS D'EXPORTATION
@@ -31,8 +31,8 @@ for chemin in data_dir.rglob("*"):
 
         print(f"Traitement de : {chemin.name} ({categorie})...")
 
-        # 1. Normalisation (Conversion en Markdown)
-        docs_traites = []
+        # 1. Étape de Normalisation (brut au format Document LangChain)
+        docs_traites: list[Document] = []
         if ext in [".xlsx", ".xls"]:
             docs_traites = charger_excel(chemin, categorie)
         elif ext in [".pdf", ".docx", ".html"]:
@@ -41,22 +41,22 @@ for chemin in data_dir.rglob("*"):
         for doc in docs_traites:
             nom_source = doc.metadata["nom_fichier"]
 
+            # Formatage du nom d'exportation
             if doc.metadata["type_document"] == "excel":
                 nom_onglet = doc.metadata["onglet"].replace(" ", "_")
                 nom_export = f"{compteur}_{nom_source}_onglet_{doc.metadata['onglet_index']}_{nom_onglet}.md"
             else:
                 nom_export = f"{compteur}_{nom_source}.md"
 
-            # Sauvegarde de la version normalisée brute
+            # 2. Sauvegarde de la version normalisée brute (RAW)
             chemin_raw = DOSSIER_OUTPUT_RAW / nom_export
             with open(chemin_raw, "w", encoding="utf-8") as f:
                 f.write(doc.page_content)
 
-            # 2. Nettoyage (appliqué sur le texte normalisé)
-            contenu_nettoye = nettoyer_texte(doc.page_content)
-            doc.page_content = contenu_nettoye
+            # 3. Étape de Nettoyage via LangChain + re
+            doc = nettoyer_document_langchain(doc)
 
-            # Sauvegarde de la version nettoyée
+            # 4. Sauvegarde de la version nettoyée (CLEAN)
             chemin_clean = DOSSIER_OUTPUT_CLEAN / nom_export
             with open(chemin_clean, "w", encoding="utf-8") as f:
                 f.write(doc.page_content)
@@ -67,5 +67,5 @@ for chemin in data_dir.rglob("*"):
             tous_les_documents_propres.append(doc)
 
 print(
-    f"\nTerminé ! {len(tous_les_documents_propres)} document(s) nettoyé(s) dans 'data/output/clean/'."
+    f"\n✅ Terminé ! {len(tous_les_documents_propres)} document(s) nettoyé(s) dans 'data/output/clean/'."
 )
