@@ -1,8 +1,0 @@
-pandas 
-requests
-pathlib
-docling
-langchain
-openpyxl
-tabulate
-langchain-docling
