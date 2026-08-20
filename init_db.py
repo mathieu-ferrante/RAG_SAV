@@ -1,11 +1,9 @@
 import os
 from dotenv import load_dotenv
 
-# Forcer l'encodage client et la langue des messages en UTF-8/Anglais
 os.environ["PGCLIENTENCODING"] = "UTF8"
 os.environ["LC_MESSAGES"] = "C"
 
-# Chargement du fichier .env
 try:
     load_dotenv(encoding="utf-8")
 except Exception:
@@ -22,7 +20,6 @@ TARGET_DB = os.getenv("DB_NAME", "rag_db")
 
 
 def create_database_if_not_exists():
-    # Connexion a la base par defaut 'postgres' pour verifier/creer la base cible
     conn = psycopg2.connect(
         dbname="postgres",
         user=DB_USER,
@@ -33,7 +30,6 @@ def create_database_if_not_exists():
     conn.autocommit = True
     cur = conn.cursor()
 
-    # Verification de l'existence de la base
     cur.execute("SELECT 1 FROM pg_database WHERE datname = %s;", (TARGET_DB,))
     exists = cur.fetchone()
 
@@ -48,7 +44,6 @@ def create_database_if_not_exists():
 
 
 def init_tables():
-    # Connexion a la base cible pour creer l'extension et les tables
     conn = psycopg2.connect(
         dbname=TARGET_DB,
         user=DB_USER,
@@ -61,7 +56,7 @@ def init_tables():
 
     print(f"Connexion a la base '{TARGET_DB}' reussie.")
 
-    # 1. Verification et activation de pgvector
+    # 1. Activation de pgvector
     cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     cur.execute(
         "SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';"
@@ -83,7 +78,7 @@ def init_tables():
     )
     print("Table 'documents' prete.")
 
-    # 3. Table enfant : chunks (vector 1024 pour BGE-M3)
+    # 3. Table enfant : chunks (vector 1024 + tsvector automatise pour BM25)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS chunks (
@@ -91,12 +86,32 @@ def init_tables():
             document_source VARCHAR(255) REFERENCES documents(source_file) ON DELETE CASCADE,
             page_content TEXT NOT NULL,
             metadata JSONB,
-            embedding vector(1024), 
+            embedding vector(1024),
+            fts tsvector GENERATED ALWAYS AS (to_tsvector('french', page_content)) STORED,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
         );
     """
     )
-    print("Table 'chunks' prete (colonne embedding vector(1024)).")
+    print("Table 'chunks' prete avec support hybride (Vector + Full-Text Search).")
+
+    # 4. Creation des index de performance
+    # Index GIN pour la recherche textuelle BM25
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS chunks_fts_idx 
+        ON chunks USING GIN(fts);
+    """
+    )
+    print("Index GIN textuel cree.")
+
+    # Index HNSW pour la recherche vectorielle rapide
+    cur.execute(
+        """
+        CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw_idx 
+        ON chunks USING hnsw (embedding vector_cosine_ops);
+    """
+    )
+    print("Index HNSW vectoriel cree.")
 
     cur.close()
     conn.close()
