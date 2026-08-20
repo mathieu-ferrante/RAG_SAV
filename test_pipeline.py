@@ -8,7 +8,7 @@ def tester_pipeline():
 
     # 1. Vérification de l'existence des dossiers
     if not DOSSIER_RAW.exists() or not DOSSIER_CLEAN.exists():
-        print("❌ ERREUR : Les dossiers d'exportation n'existent pas. Lance 'main.py' d'abord.")
+        print("ERREUR : Les dossiers d'exportation n'existent pas. Lance 'main.py' d'abord.")
         return
 
     fichiers_raw = list(DOSSIER_RAW.glob("*.md"))
@@ -26,7 +26,7 @@ def tester_pipeline():
         print("❌ ÉCHEC : Le nombre de fichiers dans RAW et CLEAN ne correspond pas.")
         return
 
-    print("✅ TEST 1 REUSSI : Tous les fichiers sont présents dans RAW et CLEAN.")
+    print("TEST 1 REUSSI : Tous les fichiers sont présents dans RAW et CLEAN.")
 
     # 3. Test du contenu (fichiers vides + structure des tableaux Excel)
     fichiers_vides = []
@@ -36,7 +36,7 @@ def tester_pipeline():
         path_raw = DOSSIER_RAW / path_clean.name
 
         if not path_raw.exists():
-            print(f"❌ ÉCHEC : Le fichier correspondant {path_clean.name} n'existe pas dans RAW.")
+            print(f"ÉCHEC : Le fichier correspondant {path_clean.name} n'existe pas dans RAW.")
             continue
 
         content_clean = path_clean.read_text(encoding="utf-8").strip()
@@ -54,16 +54,16 @@ def tester_pipeline():
                 tableaux_alteres.append((path_clean.name, pipes_raw, pipes_clean))
 
     if fichiers_vides:
-        print(f"❌ ÉCHEC : Fichiers vides détectés dans CLEAN : {fichiers_vides}")
+        print(f"ÉCHEC : Fichiers vides détectés dans CLEAN : {fichiers_vides}")
     else:
-        print("✅ TEST 2 REUSSI : Aucun fichier vide.")
+        print("TEST 2 REUSSI : Aucun fichier vide.")
 
     if tableaux_alteres:
-        print("⚠️ ATTENTION : Perte potentielle de structure sur des tableaux Excel :")
+        print("ATTENTION : Perte potentielle de structure sur des tableaux Excel :")
         for nom, raw, clean in tableaux_alteres:
             print(f"   - {nom} : {raw} '|' en RAW vs {clean} '|' en CLEAN")
     else:
-        print("✅ TEST 3 REUSSI : Les tableaux Excel ont conservé leur structure.")
+        print("TEST 3 REUSSI : Les tableaux Excel ont conservé leur structure.")
 
     print("\n=== PIPELINE VALIDÉ AVEC SUCCÈS ===")
 

@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="Claude">
   <diagram id="rag-electrodomus" name="Architecture RAG Locale">
-    <mxGraphModel dx="1417" dy="617" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2480" pageHeight="1000" math="0" shadow="0">
+    <mxGraphModel dx="1488" dy="648" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2480" pageHeight="1000" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -46,7 +46,7 @@
         <mxCell id="n16" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#1a1a1a;strokeColor=#ffffff;fontColor=#ffffff;verticalAlign=top;align=center;fontSize=14;fontStyle=1;horizontal=1;startSize=30;spacingTop=4;" value="TRAITEMENT DES DONNÉES PIPELINE DE RAG" vertex="1">
           <mxGeometry height="750" width="220" x="580" y="60" as="geometry" />
         </mxCell>
-        <mxCell id="n17" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#ffffff;fontColor=#ffffff;fontSize=12;arcSize=8;fontStyle=1;" value="Nettoyage (LangChain)" vertex="1">
+        <mxCell id="n17" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#ffffff;fontColor=#ffffff;fontSize=12;arcSize=8;fontStyle=1;" value="Nettoyage (LangChain) + regex" vertex="1">
           <mxGeometry height="80" width="190" x="595" y="120" as="geometry" />
         </mxCell>
         <mxCell id="n18" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#ffffff;fontColor=#ffffff;fontSize=12;arcSize=8;fontStyle=1;" value="Chunking Intelligent Hiérarchique / Sémantique (LangChain)" vertex="1">
@@ -61,7 +61,7 @@
         <mxCell id="n21" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0d1f2d;strokeColor=#4da3ff;fontColor=#ffffff;fontSize=12;arcSize=8;fontStyle=1;" value="Index Dense (Sémantique)" vertex="1">
           <mxGeometry height="150" width="230" x="855" y="128" as="geometry" />
         </mxCell>
-        <mxCell id="n22" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#4da3ff;fontColor=#ffffff;fontSize=12;arcSize=8;" value="Embedding all-MiniLM-L6-v2 (local)&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
+        <mxCell id="n22" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#4da3ff;fontColor=#ffffff;fontSize=12;arcSize=8;" value="Embedding BGE-3&amp;nbsp; (local)&lt;div&gt;&lt;br&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="70" width="210" x="865" y="140" as="geometry" />
         </mxCell>
         <mxCell id="n23" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#4da3ff;fontColor=#ffffff;fontSize=12;arcSize=8;" value="Génération des Vecteurs" vertex="1">

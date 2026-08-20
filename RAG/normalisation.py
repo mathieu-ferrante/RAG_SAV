@@ -70,3 +70,17 @@ def charger_avec_docling(chemin: Path, categorie: str) -> list[Document]:
     )
 
     return [doc]
+
+
+def charger_document(chemin: Path) -> list[Document]:
+    """Achemine le fichier vers la fonction appropriée et renvoie une liste de Documents."""
+    extension = chemin.suffix.lower()
+    categorie = chemin.parent.name if chemin.parent.name != "raw" else "general"
+
+    if extension in [".xlsx", ".xls"]:
+        return charger_excel(chemin, categorie)
+    elif extension in [".pdf", ".docx", ".html", ".htm"]:
+        return charger_avec_docling(chemin, categorie)
+    else:
+        print(f"⚠️ Format ignoré (non pris en charge) : {chemin.name}")
+        return []
