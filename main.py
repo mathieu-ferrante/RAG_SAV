@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
-from RAG.chunking import decouper_documents
-from RAG.nettoyage import nettoyer_document_langchain
-from RAG.normalisation import charger_document
+from pipeline.chunking import decouper_documents
+from pipeline.nettoyage import nettoyer_document_langchain
+from pipeline.normalisation import charger_document
 
 DOSSIER_RAW_INPUT = Path("data/raw")
 

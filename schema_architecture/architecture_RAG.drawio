@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="Claude">
   <diagram id="rag-electrodomus" name="Architecture RAG Locale">
-    <mxGraphModel dx="1488" dy="648" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2480" pageHeight="1000" math="0" shadow="0">
+    <mxGraphModel dx="1984" dy="864" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2480" pageHeight="1000" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -70,7 +70,7 @@
         <mxCell id="n24" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2d1f0d;strokeColor=#ffd24d;fontColor=#ffffff;fontSize=12;arcSize=8;fontStyle=1;" value="Index Sparse (Lexical)" vertex="1">
           <mxGeometry height="190" width="230" x="855" y="310" as="geometry" />
         </mxCell>
-        <mxCell id="n25" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#ffd24d;fontColor=#ffffff;fontSize=12;arcSize=8;" value="Indexation BM25 (Local, rank-bm25)" vertex="1">
+        <mxCell id="n25" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#ffd24d;fontColor=#ffffff;fontSize=12;arcSize=8;" value="Indexation FTS&amp;nbsp;&lt;div&gt;(&lt;span style=&quot;background-color: transparent;&quot;&gt;ts_rank_cd)&lt;/span&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="60" width="210" x="865" y="318" as="geometry" />
         </mxCell>
         <mxCell id="n26" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#ffd24d;fontColor=#ffffff;fontSize=12;arcSize=8;" value="Génération Index Mots-clés" vertex="1">
