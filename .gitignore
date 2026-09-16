@@ -1,0 +1,6 @@
+.venv
+__pycache__
+data/
+output/
+.env
+.$architecture_RAG.drawio.bkp

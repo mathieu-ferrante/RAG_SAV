@@ -1,6 +1,6 @@
 <mxfile host="Electron" agent="Claude">
   <diagram id="rag-electrodomus" name="Architecture RAG Locale">
-    <mxGraphModel dx="1984" dy="864" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2480" pageHeight="1000" math="0" shadow="0">
+    <mxGraphModel dx="1751" dy="762" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2480" pageHeight="1000" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -97,7 +97,7 @@
         <mxCell id="n33" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#0d1f2d;strokeColor=#4da3ff;fontColor=#ffffff;fontSize=12;arcSize=8;" value="Génération Embedding Requête" vertex="1">
           <mxGeometry height="80" width="155" x="1430" y="340" as="geometry" />
         </mxCell>
-        <mxCell id="n34" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2d1f0d;strokeColor=#ffd24d;fontColor=#ffffff;fontSize=12;arcSize=8;" value="Génération BM25 Requête&amp;nbsp;" vertex="1">
+        <mxCell id="n34" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#2d1f0d;strokeColor=#ffd24d;fontColor=#ffffff;fontSize=12;arcSize=8;" value="Génération FTS" vertex="1">
           <mxGeometry height="80" width="150" x="1600" y="340" as="geometry" />
         </mxCell>
         <mxCell id="n35" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#000000;strokeColor=#ffffff;fontColor=#ffffff;fontSize=12;arcSize=8;fontStyle=1;" value="Récupération Résultats (Top-K Dense + Top-K Sparse)" vertex="1">
