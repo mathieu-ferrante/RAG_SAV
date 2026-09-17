@@ -97,7 +97,7 @@ seule branche vectorielle — sans aucune contrainte de modèle.
 
 ### La recherche sémantique ne peut pas trancher non plus
 
-Sur 875 chunks, **529 (60 %) sont le doublon exact** d'un passage figurant
+Sur 1 001 chunks, **642 (64 %) sont le doublon exact** d'un passage figurant
 dans un autre document ; certains paragraphes existent en 18 exemplaires, à
 travers les lave-linge, les lave-vaisselle *et* les fours. Seul le préfixe
 diffère — quelques caractères sur plus de quatre cents. Les vecteurs produits
@@ -114,6 +114,12 @@ Chaque document reçoit une **portée** dérivée de son nom ou de son contenu :
 | `BT-2026-007.docx` | `modele` | WX-500 *(lu dans le contenu)* |
 | `CGV_Electrodomus.pdf` | `global` | tout |
 
+La déduction par le **contenu** (dernière ligne du tableau) est réservée aux
+bulletins techniques — `CATEGORIES_PORTEE_PAR_CONTENU` dans `portee.py`. Le
+jour où le CGV cite « WX-450 » en exemple, il deviendrait sinon un document
+WX-450 et disparaîtrait des recherches de tous les autres appareils, alors
+qu'il est le seul à répondre aux questions de garantie.
+
 La recherche applique alors un **filtre dur**, identique sur les deux branches :
 
 ```sql
@@ -123,7 +129,7 @@ WHERE metadata->'modeles_couverts' @> to_jsonb('WX-450'::text)
 
 C'est une **exclusion**, pas un critère de classement : un classement remonte
 les bons passages mais ne retire jamais les mauvais. Concrètement, l'espace de
-recherche passe de 875 chunks à 116 pour un WX-450 — 87 % du bruit éliminé
+recherche passe de 1 001 chunks à 72 pour un WX-450 — 93 % du bruit éliminé
 avant même que la recherche commence.
 
 ---
@@ -192,7 +198,7 @@ séparateurs, pas à récrire un motif.
   `analyse["origine_modele"]`.
 
 Vérification : `python tests/test_detection.py` (aucune dépendance) — et rejeu
-des deux jeux de motifs, ancien et nouveau, sur les 875 chunks du corpus :
+des deux jeux de motifs, ancien et nouveau, sur les 420 chunks du corpus :
 **aucune différence de détection**, donc aucun faux positif introduit.
 
 ---
@@ -227,8 +233,9 @@ bulletin BT-2026-007, il ne doit pas déclencher d'escalade pour autant.
 > à filtrer — un code posé sans appareil, ou un code que personne ne
 > documente. C'est ce trou que ferment les deux dernières règles.
 
-Vérification : `python tests/test_escalade.py` (référentiel simulé, donc
-aucune base requise — ce sont les règles qui sont testées, pas le SQL).
+Vérification : `python tests/test_escalade.py` — 12 cas sur référentiel simulé,
+donc aucune base requise. Ce sont les **règles** qui sont testées, pas le SQL :
+les deux requêtes de `escalade.py` restent à valider sur la base réelle.
 
 ---
 
@@ -275,14 +282,39 @@ règle.
 | Référentiel Excel découpé ligne par ligne | fait |
 | Filtre dur sur le modèle | fait |
 | Escalade déterministe + confiance honnête | fait |
-| Détection souple des références et des codes + tests | fait |
+| Détection souple des références et des codes | fait |
+| Escalade complète : code inconnu, code sans appareil | fait |
+| Portée, nettoyage, imports paresseux | fait |
 | **Moteur de réponse (LLM, citations, escalade)** | à faire |
 | **API FastAPI + jeu d'évaluation** | à faire |
+
+### Tests
+
+Quatre suites, **27 tests**, aucune base de données requise :
+
+```bash
+python tests/test_detection.py    # 11  références et codes erreur
+python tests/test_escalade.py     #  4  les 5 règles, référentiel simulé
+python tests/test_ingestion.py    # 10  portée documentaire et nettoyage
+python tests/test_imports.py      #  2  la logique pure s'importe sans psycopg2
+```
+
+`pytest tests/` fonctionne aussi. Ce qui n'est **pas** couvert : le SQL
+lui-même (filtre dur, RRF, requêtes de `escalade.py`) et le chunking.
 
 ### Points ouverts
 
 1. Calibrer `SEUIL_SIMILARITE_PROVISOIRE` sur le jeu d'évaluation.
 2. Les tables « codes erreur » des manuels contiennent encore plusieurs codes
-   par chunk (E23 + E31 + E40). Le référentiel, lui, est propre.
+   par chunk (E23 + E31 + E40) — 39 chunks concernés. Le référentiel est propre.
 3. Choix du LLM : couche d'abstraction prévue (Ollama local par défaut,
    bascule API par variable `.env`).
+4. L'index GIN sur `metadata` n'est pas utilisé par le filtre actuel
+   (`metadata->'modeles_couverts' @> …` n'est pas indexable sous cette forme).
+   Sans effet sur 875 lignes, à reprendre avant l'API.
+5. `connexion()` ne fait jamais de `commit()` : tout passe par `autocommit`.
+   La première écriture via `curseur()` sans autocommit serait perdue en
+   silence. À régler avant FastAPI, avec un pool de connexions.
+6. Le repli plein texte par mots laisse passer les fragments de modèle
+   (`450`) et des mots vides (`plus`). Sans effet sur le rappel, mais le
+   classement `ts_rank_cd` s'en ressent.

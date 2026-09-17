@@ -25,13 +25,23 @@ CATEGORIES_INTERNES = {"Bulletins_techniques", "Procedures_SAV"}
 # pour les points qu'il traite (cf. BT-2026-011).
 PRIORITE_PAR_CATEGORIE = {"Bulletins_techniques": 10}
 
+# Seules ces catégories voient leur portée déduite du CONTENU (étape 4).
+#
+# Un bulletin technique ne dit pas dans son nom quel appareil il vise : seul
+# son texte le dit (BT-2026-007 vise le WX-500). Mais appliquer cette règle
+# partout est dangereux : le jour où le CGV cite « WX-450 » en exemple, tout le
+# CGV devient portee=modele / WX-450 et disparaît des recherches de tous les
+# autres appareils. Un document transverse doit le rester, même s'il nomme un
+# modèle au détour d'une phrase.
+CATEGORIES_PORTEE_PAR_CONTENU = {"Bulletins_techniques"}
+
 
 def date_fichier(chemin: Path) -> str:
     """Date de dernière modification, au format YYYY-MM-DD."""
     return datetime.fromtimestamp(chemin.stat().st_mtime).strftime("%Y-%m-%d")
 
 
-def determiner_portee(chemin: Path, texte: str = "") -> dict:
+def determiner_portee(chemin: Path, texte: str = "", categorie: str | None = None) -> dict:
     """Renvoie toujours les mêmes clés, par ordre de fiabilité décroissante.
 
     portee = "modele"  un ou plusieurs modèles précis (Manuel_WX-450.pdf,
@@ -60,7 +70,9 @@ def determiner_portee(chemin: Path, texte: str = "") -> dict:
 
         # 4. Des modèles cités dans le CONTENU. Cas des bulletins techniques :
         #    BT-2026-007 vise le WX-500, mais son nom de fichier ne le dit pas.
-        modeles = extraire_modeles(texte)
+        #    Réservé aux catégories concernées — voir CATEGORIES_PORTEE_PAR_CONTENU.
+        if categorie in CATEGORIES_PORTEE_PAR_CONTENU:
+            modeles = extraire_modeles(texte)
 
     if modeles:
         gammes = {gamme_du_modele(m) for m in modeles}
@@ -73,6 +85,21 @@ def determiner_portee(chemin: Path, texte: str = "") -> dict:
 
     # 5. Rien trouvé : document transverse (CGV).
     return {"portee": "global", "modele": None, "gamme": None, "modeles_couverts": []}
+
+
+def portee_referentiel(code_gamme: str | None, modeles: list[str]) -> str:
+    """Portée d'une ligne du référentiel Excel — R3b.
+
+    La portée dépendait de la seule GAMME : un onglet mal nommé produisait des
+    lignes `global`, qui passent TOUS les filtres, toutes gammes confondues —
+    exactement ce que le filtre dur est censé empêcher. Or la colonne
+    « Modèles concernés » suffit à contraindre la ligne, même sans gamme.
+
+    `global` reste possible, mais seulement quand on ne sait vraiment rien.
+    """
+    if code_gamme:
+        return "gamme"
+    return "modele" if modeles else "global"
 
 
 def _portee_gamme(code_gamme: str) -> dict:
@@ -95,5 +122,5 @@ def metadonnees_communes(chemin: Path, categorie: str, texte: str = "") -> dict:
         "audience": "interne" if categorie in CATEGORIES_INTERNES else "client",
         "priorite": PRIORITE_PAR_CATEGORIE.get(categorie, 0),
     }
-    base.update(determiner_portee(chemin, texte))
+    base.update(determiner_portee(chemin, texte, categorie))
     return base

@@ -8,7 +8,15 @@ from langchain_core.documents import Document
 MOTIF_CARACTERES_CONTROLE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]")
 MOTIF_ZONE_PRIVEE = re.compile(r"[-]")  # glyphes d'icônes des PDF
 MOTIF_IMAGE_MARKDOWN = re.compile(r"!\[.*?\]\(.*?\)")
-MOTIF_PUCE_DOUBLE = re.compile(r"^[ \t]*[-*+•][ \t]+[-*+•][ \t]*", re.MULTILINE)
+# Puce doublée par la conversion (« - - Étape 1 »). La seconde puce ne doit
+# PAS pouvoir être une astérisque de gras : « - **Gamme :** WX » n'est pas une
+# double puce, et l'ancien motif y mangeait une astérisque, laissant
+# « - *Gamme :** WX » dans les 20 lignes du référentiel — soit exactement le
+# texte que le LLM cite au client. D'où le `\*(?!\*)`, et l'espace EXIGÉ après
+# la seconde puce (« - *italique* » reste intact).
+MOTIF_PUCE_DOUBLE = re.compile(
+    r"^[ \t]*[-*+•][ \t]+(?:[-+•]|\*(?!\*))[ \t]+", re.MULTILINE
+)
 MOTIF_PUCE = re.compile(r"^[ \t]*[•▪►][ \t]*", re.MULTILINE)
 MOTIF_TITRE_VIDE = re.compile(r"^#{1,6}\s*$", re.MULTILINE)
 

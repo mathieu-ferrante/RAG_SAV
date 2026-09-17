@@ -19,7 +19,10 @@ from rag_sav.catalogue import (
     libelle_gamme,
     modeles_de_la_gamme,
 )
-from rag_sav.stockage.connexion import curseur
+
+# `curseur` est importé DANS les deux fonctions qui interrogent la base (R8) :
+# les règles elles-mêmes sont de la logique pure et doivent pouvoir être
+# testées, et appelées par le jeu d'évaluation, sans PostgreSQL.
 
 # ---------------------------------------------------------------------------
 # Ce que la documentation connaît réellement
@@ -56,6 +59,8 @@ def codes_referentiel(relire: bool = False) -> dict[str, list[str]]:
 
     Exemple : {'E01': ['LV','WX'], 'E15': ['LV'], 'E23': ['LV','WX'], …}
     """
+    from rag_sav.stockage.connexion import curseur
+
     global _cache_referentiel
     if _cache_referentiel is None or relire:
         with curseur() as cur:
@@ -90,6 +95,8 @@ def code_connu(code: str) -> bool:
     if code in codes_referentiel():
         return True
     if code not in _cache_codes_connus:
+        from rag_sav.stockage.connexion import curseur
+
         with curseur() as cur:
             cur.execute(REQUETE_CODE_DANS_LE_TEXTE, {"code": code})
             _cache_codes_connus[code] = bool(cur.fetchone()["present"])

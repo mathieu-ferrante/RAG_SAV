@@ -21,7 +21,7 @@ from rag_sav.catalogue import (
     modeles_de_la_gamme,
     normaliser_code_erreur,
 )
-from rag_sav.ingestion.portee import metadonnees_communes
+from rag_sav.ingestion.portee import metadonnees_communes, portee_referentiel
 
 
 def _ligne_des_entetes(df: pd.DataFrame) -> int | None:
@@ -85,7 +85,9 @@ def _document_code_erreur(
         "code_erreur": code,
         "signification": signification,
         "version_referentiel": version,
-        "portee": "gamme" if code_gamme else "global",
+        # R3b : sans gamme mais avec des modèles, la ligne est contrainte au
+        # modèle — pas « global », qui passerait tous les filtres.
+        "portee": portee_referentiel(code_gamme, modeles),
         "gamme": code_gamme,
         "modele": None,
         "modeles_couverts": modeles,
@@ -143,12 +145,27 @@ def charger(chemin: Path, categorie: str) -> list[Document]:
 def _onglet_brut(
     chemin: Path, categorie: str, nom_onglet: str, index_onglet: int, df: pd.DataFrame
 ) -> Document:
-    """Secours : onglet dont la structure n'a pas été reconnue."""
+    """Secours : onglet dont la structure n'a pas été reconnue.
+
+    Le contenu part indexé tel quel, mais surtout PAS en « global » : un onglet
+    non reconnu deviendrait un gros bloc visible depuis toutes les gammes. Le
+    nom de l'onglet (« Gamme WX ») suffit presque toujours à le contraindre.
+    """
     contenu = (
         f"# {chemin.stem}\n## Onglet: {nom_onglet}\n\n"
         f"{df.fillna('').to_markdown(index=False)}"
     )
     metadata = metadonnees_communes(chemin, categorie, contenu)
+
+    code_gamme = detecter_gamme_isolee(nom_onglet)
+    if code_gamme:
+        metadata.update({
+            "portee": "gamme",
+            "gamme": code_gamme,
+            "modele": None,
+            "modeles_couverts": modeles_de_la_gamme(code_gamme),
+        })
+
     metadata.update({
         "type_document": "excel",
         "onglet": nom_onglet,

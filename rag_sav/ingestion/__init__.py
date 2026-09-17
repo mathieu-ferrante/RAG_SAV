@@ -11,12 +11,26 @@ from rag_sav.config import (
     DOSSIER_SORTIE_CLEAN,
     DOSSIER_SORTIE_RAW,
 )
-from rag_sav.ingestion.chargeurs import charger_document
-from rag_sav.ingestion.chunking import decouper_documents
-from rag_sav.ingestion.export import exporter_par_source, vider_dossier
-from rag_sav.ingestion.nettoyage import nettoyer_document
-
 __all__ = ["executer_pipeline", "charger_document", "decouper_documents"]
+
+# Les chargeurs tirent pandas et Docling (plusieurs centaines de Mo de modèles).
+# Les importer ici rendrait `import rag_sav.ingestion.portee` — de la logique
+# pure — impossible sans tout l'outillage de conversion. Même raison qu'en R8
+# pour `recherche/`. Résolus au premier accès (PEP 562).
+_PARESSEUX = {
+    "charger_document": "rag_sav.ingestion.chargeurs",
+    "decouper_documents": "rag_sav.ingestion.chunking",
+}
+
+
+def __getattr__(nom: str):
+    module = _PARESSEUX.get(nom)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} n'a pas d'attribut {nom!r}")
+
+    from importlib import import_module
+
+    return getattr(import_module(module), nom)
 
 
 def _fichiers_sources() -> list[Path]:
@@ -34,6 +48,8 @@ def _lire_corpus() -> list[Document]:
     premier passage, et sans retour à l'écran on ne distingue pas un pipeline
     qui travaille d'un pipeline bloqué.
     """
+    from rag_sav.ingestion.chargeurs import charger_document
+
     fichiers = _fichiers_sources()
     documents: list[Document] = []
     debut = time.perf_counter()
@@ -48,6 +64,10 @@ def _lire_corpus() -> list[Document]:
 
 def executer_pipeline() -> list[Document]:
     """Ingestion -> nettoyage -> découpage, avec une sortie JSON par étape."""
+    from rag_sav.ingestion.chunking import decouper_documents
+    from rag_sav.ingestion.export import exporter_par_source, vider_dossier
+    from rag_sav.ingestion.nettoyage import nettoyer_document
+
     if not DOSSIER_RAW.exists():
         print(f"Dossier introuvable : « {DOSSIER_RAW} ».")
         return []
