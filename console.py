@@ -1,26 +1,27 @@
-"""Point d'entrée : tester la recherche à la main.
+"""Point d'entrée : l'assistant SAV en console, ou la recherche seule.
 
-    python console.py                          # jeu de questions types puis mode interactif
+    python console.py                          # l'assistant : une réponse, puis ses annexes
     python console.py "mon wx450 affiche e23"  # une question
+    python console.py --questions-types        # le jeu de recette
+
+    python console.py --passages ...           # la RECHERCHE seule, sans LLM :
+                                               # les passages classés, pour déboguer
+
+Sans `--passages`, ce point d'entrée est identique à `python repondre.py`.
 """
 
 import sys
 
+# Sortie redirigée vers un fichier sous Windows (`> sortie.txt`) : Python écrit
+# alors en cp1252, qui ne connaît pas le tiret insécable « ‑ » que les modèles
+# mettent dans « WX‑450 ». Un caractère non représentable devient « ? » au lieu
+# de faire planter l'assistant en plein milieu d'une réponse.
+for _flux in (sys.stdout, sys.stderr):
+    if hasattr(_flux, "reconfigure"):
+        _flux.reconfigure(errors="replace")
+
+from questions_types import QUESTIONS_TYPES
 from rag_sav.recherche import rechercher
-
-QUESTIONS_TYPES = [
-    "Mon lave-vaisselle LV-200 affiche le code erreur E23",
-    "Mon lave-linge WX-450 affiche E23",
-    "Que signifie le code E23 ?",
-    "mon wx500 affiche e52",
-    "Comment détartrer mon lave-linge WX-400 ?",
-    "Modele LV verre marqués",
-    "bonjour mon lave-linge 450 affiche e 23",   # écriture libre
-    "j'ai un WX-460, code E23",                  # référence hors catalogue
-    "voir page 450 du manuel, code F12",         # code hors documentation
-    "j'ai le code E77 qui s'affiche",            # code sans appareil
-]
-
 
 def afficher(question: str, top_k: int = 5) -> None:
     print(f"\n{'=' * 78}\nQUESTION : « {question} »\n{'=' * 78}")
@@ -82,9 +83,19 @@ def boucle_interactive() -> None:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        afficher(" ".join(sys.argv[1:]))
-    else:
+    arguments = sys.argv[1:]
+
+    if "--passages" not in arguments:
+        from repondre import main
+
+        main(arguments)
+        sys.exit(0)
+
+    arguments = [a for a in arguments if a != "--passages"]
+    if "--questions-types" in arguments:
         for question in QUESTIONS_TYPES:
             afficher(question, top_k=3)
+    elif arguments:
+        afficher(" ".join(arguments))
+    else:
         boucle_interactive()

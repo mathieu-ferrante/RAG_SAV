@@ -28,6 +28,14 @@ CAS = [
     ("rag_sav.ingestion.portee", ["pandas", "docling", "psycopg2"]),
     ("rag_sav.ingestion.nettoyage", ["pandas", "docling", "psycopg2"]),
     ("rag_sav.ingestion", ["pandas", "docling"]),
+    # Étape 10 : le moteur de réponse ne doit pas davantage tirer la base ni
+    # les modèles. C'est ce qui permettra au jeu d'évaluation de mesurer le
+    # verrou et le contrôle des citations sans PostgreSQL.
+    ("rag_sav.generation.verrou", ["psycopg2", "sentence_transformers", "torch"]),
+    ("rag_sav.generation.controle", ["psycopg2", "pandas", "docling"]),
+    ("rag_sav.generation.prompt", ["psycopg2", "pandas", "docling"]),
+    ("rag_sav.generation.llm", ["psycopg2", "sentence_transformers", "torch"]),
+    ("rag_sav.generation", ["psycopg2", "sentence_transformers", "torch"]),
 ]
 
 MODELE = (
@@ -71,6 +79,10 @@ def test_api_publique_toujours_accessible():
         assert callable(getattr(recherche, nom)), nom
 
     assert callable(ingestion.executer_pipeline)
+
+    from rag_sav import generation
+
+    assert callable(generation.repondre)
 
     # Un nom inconnu doit lever AttributeError, pas ImportError : sinon
     # `from rag_sav.ingestion import cache` (un vrai sous-module) casserait.
