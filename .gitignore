@@ -4,3 +4,4 @@ data/
 output/
 .env
 .$architecture_RAG.drawio.bkp
+api/comptes_conseillers.json

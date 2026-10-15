@@ -28,6 +28,17 @@ CODES_DANS_LE_TEXTE = set(REFERENTIEL_SIMULE) | {"E52"}
 escalade.codes_referentiel = lambda relire=False: REFERENTIEL_SIMULE
 escalade.code_connu = lambda code: code in CODES_DANS_LE_TEXTE
 
+# Documentation visible par appareil : un code du référentiel vaut pour ses
+# gammes ; E52 est documenté (bulletin) pour la gamme WX.
+TEXTE_PAR_GAMME = {("E52", "WX")}
+
+
+def _documente(code, analyse):
+    return analyse["gamme"] in REFERENTIEL_SIMULE.get(code, []) or (code, analyse["gamme"]) in TEXTE_PAR_GAMME
+
+
+escalade.code_documente_pour_appareil = _documente
+
 
 def motif(question: str) -> str | None:
     decision = escalade.decider_escalade(analyser_question(question))
@@ -39,7 +50,10 @@ CAS = [
     ("Mon lave-linge WX-450 affiche E23",               None),
     ("mon wx500 affiche e52",                           None),   # code hors référentiel mais documenté
     ("Comment détartrer mon lave-linge WX-400 ?",       None),   # aucun code
-    ("mon lave-linge affiche E15",                      None),   # gamme par le vocabulaire
+    ("mon lave-linge affiche E20",                      None),   # gamme par le vocabulaire
+    ("mon lave-linge affiche E15",                      "code_hors_appareil"),  # E15 = lave-vaisselle
+    ("Mon WX-450 affiche E15",                          "code_hors_appareil"),
+    ("Mon lave-vaisselle LV-200 affiche E15",           None),
     ("bonjour mon lave-linge 450 affiche e 23",         None),   # écriture libre
     ("j'ai un wx450 et un lv200",                       "plusieurs_modeles"),
     ("j'ai un WX-460, code E23",                        "reference_inconnue"),
@@ -70,6 +84,12 @@ def test_code_ambigu_nomme_les_gammes():
     decision = escalade.decider_escalade(analyser_question("Que signifie le code E23 ?"))
     assert decision["gammes_concernees"] == ["LV", "WX"]
     assert "lave-linge" in decision["message"] and "lave-vaisselle" in decision["message"]
+
+
+def test_code_hors_appareil_nomme_l_appareil():
+    decision = escalade.decider_escalade(analyser_question("Mon WX-450 affiche E15"))
+    assert "lave-linge WX-450" in decision["message"]
+    assert decision["code_signale"] == "E15"
 
 
 def test_codes_ambigus_deduits_du_referentiel():

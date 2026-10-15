@@ -19,15 +19,104 @@ Trois contraintes non négociables :
 ```bash
 python -m venv .venv && .venv\Scripts\activate    # Windows
 pip install -r requirements.txt
-copy .env.exemple .env                            # puis renseigner le mot de passe
+copy .env.exemple .env                            # puis renseigner base et LLM
 
 python init_db.py     # crée la base, les tables et les index (une seule fois)
 python main.py        # data/raw -> data/output/{raw,clean,chunk}
 python indexer.py     # embeddings BGE-M3 + chargement en base
-python console.py     # tester la recherche
+
+python console.py     # l'assistant en console
+python -m api        # l'assistant en API REST (http://127.0.0.1:8000/docs)
 ```
 
-`python console.py "mon wx450 affiche e23"` pour une question unique.
+Ollama doit tourner avec le modèle du `.env` (`ollama pull llama3.2`), ou le
+`.env` doit pointer vers une API compatible OpenAI.
+
+### Console
+
+```bash
+python console.py "mon wx450 affiche e23"    # une question
+python console.py --questions-types          # le jeu de recette (12 questions)
+python console.py --passages "..."           # la recherche seule, sans LLM
+python console.py --modele qwen2.5:7b "..."  # autre modèle, ponctuellement
+```
+
+### API REST
+
+```bash
+python -m api
+```
+
+Tout ce qui touche l'API est dans `api/` : `routes.py` (FastAPI), `comptes.py`,
+`reglages.py`, `__main__.py` (lancement et comptes). Le moteur `rag_sav/` ne
+sait rien de HTTP.
+
+| Méthode | Route | Rôle |
+|---|---|---|
+| `POST` | `/questions` | `{"question": "..."}` → statut, réponse, sources ; profil conseiller si identifiant + mot de passe |
+| `GET` | `/sante` | base et LLM joignables ? nombre de chunks |
+| `POST` | `/cache/vider` | à appeler après `python indexer.py`, sans redémarrer (conseiller) |
+
+```bash
+curl -X POST http://127.0.0.1:8000/questions \
+     -H "Content-Type: application/json" \
+     -d "{\"question\": \"Mon lave-linge WX-450 affiche E23\"}"
+```
+
+```json
+{
+  "question": "Mon lave-linge WX-450 affiche E23",
+  "statut": "repondu",
+  "motif": null,
+  "reponse": "Le code E23 signale un défaut de la pompe de vidange. ...",
+  "sources": [{"nom_fichier": "Manuel_WX-450.pdf",
+               "section_path": "Manuel_WX-450 > 9. Codes erreur"}],
+  "analyse": {"code": "E23", "modele": "WX-450", "gamme": "WX"},
+  "profil": "client",
+  "conseiller": null,
+  "details": null
+}
+```
+
+`reponse` est **toujours** le texte à afficher au client, quel que soit le
+statut (`repondu`, `escalade`, `refus`, `non_conforme`, `erreur_llm`). Les
+passages consultés et la réponse brute du modèle ne sortent jamais par défaut :
+`"details": true` les renvoie à un conseiller, ou à tous si `API_DETAILS=1`
+dans le `.env` (débogage). Une base injoignable rend `503`, une question vide `422`.
+
+Réglages : `API_HOTE`, `API_PORT`, `API_ORIGINES` (CORS), `API_DETAILS`,
+`FICHIER_COMPTES` — voir `.env.exemple`.
+
+### Deux profils : client et conseiller
+
+| | Client (sans identifiant) | Conseiller (identifiant + mot de passe) |
+|---|---|---|
+| Documentation interne (bulletins, procédures SAV) | lue, jamais citée | lue et citée |
+| Bulletin interne qui prévaut | conduite du référentiel + « préparez le numéro de série » | le LLM répond avec le bulletin |
+| Colonne « Intervention SAV (technicien) » | retirée du contexte | gardée |
+| Contrôle des fuites internes | actif | sans objet |
+| `details: true` | seulement si `API_DETAILS=1` | toujours |
+
+Les règles d'escalade avant recherche (référence inconnue, code ambigu…)
+s'appliquent aux deux profils.
+
+```bash
+python -m api --ajouter-conseiller jdupont     # demande le mot de passe (8 caractères mini)
+python -m api --conseillers                    # liste
+python -m api --supprimer-conseiller jdupont   # coupe son accès immédiatement
+```
+
+**Connexion (temporaire, en attendant le front).** HTTP Basic : identifiant et
+mot de passe accompagnent chaque requête, sans étape de connexion ni jeton.
+Dans `/docs`, bouton « Authorize » une fois, puis toutes les questions partent
+en conseiller ; en PowerShell, `-Credential` ; en curl, `-u jdupont:motdepasse`.
+Un identifiant faux rend `401` : l'API ne retombe jamais en silence sur le
+profil client. Hors de la machine locale, HTTPS obligatoire. Le front web
+passera à un cookie de session.
+
+Les comptes sont dans `api/comptes_conseillers.json` (hors Git) : identifiant,
+sel et empreinte PBKDF2-SHA256, jamais de mot de passe en clair. En console :
+`python console.py --conseiller "..."`.
 
 ---
 
@@ -37,12 +126,12 @@ python console.py     # tester la recherche
 main.py        ingestion du corpus
 init_db.py     création de la base
 indexer.py     calcul des embeddings et chargement
-console.py     test manuel de la recherche
+console.py     l'assistant en console (et --passages : la recherche seule)
+api/           l'assistant en API REST (python -m api)
 
 rag_sav/
-├── config.py          tous les réglages : chemins, base, seuils
+├── config.py          tous les réglages : chemins, base, seuils, LLM, API
 ├── catalogue.py       gammes, modèles, synonymes, détection dans le texte
-│                   (normaliser -> extraire -> valider, cf. plus bas)
 ├── embeddings.py      BGE-M3, chargé une seule fois
 ├── ingestion/
 │   ├── chargeurs/     excel.py · html.py · documents.py (Docling)
@@ -55,11 +144,18 @@ rag_sav/
 │   ├── schema.py      tables, pgvector, index GIN et HNSW
 │   ├── connexion.py   connexions refermées quoi qu'il arrive
 │   └── indexer.py     indexation + purge des documents retirés
-└── recherche/
-    ├── analyse.py     comprendre la question
-    ├── escalade.py    règles déterministes de refus
-    ├── requete.py     SQL hybride + filtre dur
-    └── resultats.py   mise en forme + diagnostic
+├── recherche/
+│   ├── analyse.py     comprendre la question
+│   ├── escalade.py    règles déterministes de refus, AVANT de chercher
+│   ├── requete.py     SQL hybride + filtre dur
+│   └── resultats.py   mise en forme + diagnostic
+└── generation/
+    ├── __init__.py    repondre() : enchaîne tout le reste
+    ├── verrou.py      refus APRÈS avoir cherché : contexte exploitable ?
+    ├── referentiel.py réponse tirée du référentiel (repli si le LLM échoue)
+    ├── prompt.py      règles de rédaction + passages numérotés
+    ├── llm.py         Ollama ou compatible OpenAI, essais et modèles de secours
+    └── controle.py    citations et fuites de contenu interne vérifiées
 ```
 
 **Chaîne de traitement**
@@ -67,7 +163,8 @@ rag_sav/
 ```
 data/raw → chargeurs → nettoyage → chunking → embeddings → PostgreSQL
                                                                  ↓
-question → analyse → escalade ? → recherche filtrée → contexte + diagnostic
+question → analyse → escalade ? → recherche filtrée → verrou ? → prompt
+         → LLM → contrôle → réponse (console ou API)
 ```
 
 ---
@@ -97,7 +194,7 @@ seule branche vectorielle — sans aucune contrainte de modèle.
 
 ### La recherche sémantique ne peut pas trancher non plus
 
-Sur 1 001 chunks, **642 (64 %) sont le doublon exact** d'un passage figurant
+Sur 875 chunks, **529 (60 %) sont le doublon exact** d'un passage figurant
 dans un autre document ; certains paragraphes existent en 18 exemplaires, à
 travers les lave-linge, les lave-vaisselle *et* les fours. Seul le préfixe
 diffère — quelques caractères sur plus de quatre cents. Les vecteurs produits
@@ -129,7 +226,7 @@ WHERE metadata->'modeles_couverts' @> to_jsonb('WX-450'::text)
 
 C'est une **exclusion**, pas un critère de classement : un classement remonte
 les bons passages mais ne retire jamais les mauvais. Concrètement, l'espace de
-recherche passe de 1 001 chunks à 72 pour un WX-450 — 93 % du bruit éliminé
+recherche passe de 875 chunks à 116 pour un WX-450 — 87 % du bruit éliminé
 avant même que la recherche commence.
 
 ---
@@ -213,6 +310,7 @@ Déterministe, sans aucun score — donc reproductible et auditable
 | Plusieurs appareils cités | Demander lequel |
 | Référence bien formée mais hors catalogue (`WX-460`) | Le dire, et demander de vérifier l'étiquette |
 | Code inconnu de toute la documentation (`F12`) | Le dire, et transmettre à un conseiller |
+| Code connu, mais absent de la documentation de l'appareil (`E15` sur un WX-450) | Demander de vérifier code et référence |
 | Code ambigu sans appareil identifié | Demander la référence, en nommant les gammes |
 | Code sans appareil identifié, même non ambigu (`E77`) | Demander la référence |
 
@@ -225,6 +323,13 @@ Un code est déclaré **inconnu** seulement s'il n'apparaît ni dans le
 référentiel, ni dans le texte d'aucun chunk : `E52` n'est traité que par le
 bulletin BT-2026-007, il ne doit pas déclencher d'escalade pour autant.
 
+La règle **code hors appareil** (14/10) cherche le code dans la documentation
+*visible pour cet appareil*, avec la même clause que le filtre dur. Mesure du
+12/10 sur les 252 couples modèle × code : les 132 codes d'une autre gamme sont
+absents de toute cette documentation, les 120 codes de la gamme y sont tous.
+Avant cette règle, « Mon WX-450 affiche E15 » appelait le LLM avec cinq
+passages qui ne parlent pas de E15.
+
 > **Ces règles tiennent lieu de « cross-vérification des métadonnées »** du
 > schéma d'architecture. Ce bloc avait été dessiné quand la contrainte modèle
 > était un critère de classement ; depuis, le filtre dur exclut en SQL *avant*
@@ -233,7 +338,7 @@ bulletin BT-2026-007, il ne doit pas déclencher d'escalade pour autant.
 > à filtrer — un code posé sans appareil, ou un code que personne ne
 > documente. C'est ce trou que ferment les deux dernières règles.
 
-Vérification : `python tests/test_escalade.py` — 12 cas sur référentiel simulé,
+Vérification : `python tests/test_escalade.py` — 15 cas sur référentiel simulé,
 donc aucune base requise. Ce sont les **règles** qui sont testées, pas le SQL :
 les deux requêtes de `escalade.py` restent à valider sur la base réelle.
 
@@ -268,9 +373,35 @@ bulletin hors sujet passe devant.
 
 Ces documents portent la mention « documentation interne » et citent des
 références de pièces. Règle retenue : **l'assistant les lit, mais ne les cite
-pas tels quels** à un client. La métadonnée `audience` (`client` / `interne`)
-est remontée par la recherche ; c'est le prompt de génération qui portera cette
-règle.
+pas** à un client, et `controle.py` écarte toute réponse qui cite un document
+interne ou reprend un de ses marqueurs chiffrés.
+
+Quand un bulletin interne prévaut pour le code et l'appareil demandés, le LLM
+n'est pas appelé : le client lit la conduite à tenir du référentiel (les deux
+bulletins du corpus ne changent que l'intervention technicien), présentée
+comme une signification « référencée », avec l'invitation à préparer son
+numéro de série pour le conseiller (`motif = referentiel_sous_bulletin`,
+14/10). Sans ligne de référentiel pour ce couple, un conseiller reprend la main
+(`bulletin_prevaut`, 12/10).
+
+---
+
+## Le moteur de réponse
+
+`repondre()` (`rag_sav/generation/__init__.py`) rend toujours l'un de cinq
+statuts. Un seul laisse le client lire le texte du modèle :
+
+| Statut | Décidé par | Le LLM a-t-il tourné ? |
+|---|---|---|
+| `escalade` | `escalade.py` (avant recherche) ou `verrou.py` (`bulletin_prevaut` sans ligne de référentiel) | non |
+| `refus` | `verrou.py` : rien trouvé, rien de rattaché à l'appareil, contexte trop éloigné, rien de citable | non |
+| `erreur_llm` | `llm.py` : panne, délai, quota — après essais et modèles de secours | tenté |
+| `non_conforme` | `controle.py` : citation inventée, citation interne, fuite interne | oui, réponse écartée |
+| `repondu` | `controle.py` : aucun défaut | oui |
+
+Quand le modèle échoue ou répond hors des règles alors que le référentiel
+couvre le couple code + appareil, le client lit la « conduite à tenir » du
+référentiel (`motif = repli_referentiel`) plutôt qu'un renvoi au conseiller.
 
 ---
 
@@ -283,38 +414,49 @@ règle.
 | Filtre dur sur le modèle | fait |
 | Escalade déterministe + confiance honnête | fait |
 | Détection souple des références et des codes | fait |
-| Escalade complète : code inconnu, code sans appareil | fait |
 | Portée, nettoyage, imports paresseux | fait |
-| **Moteur de réponse (LLM, citations, escalade)** | à faire |
-| **API FastAPI + jeu d'évaluation** | à faire |
+| Moteur de réponse (verrou, prompt, LLM, contrôle, repli) | fait |
+| Contenu interne : bulletin qui prévaut → conseiller, fuites détectées | fait (12/10) |
+| Escalade « code hors appareil » | fait (14/10) |
+| Bulletin qui prévaut : conduite client du référentiel au lieu d'une escalade muette | fait (14/10) |
+| Comptes conseillers : documentation interne citable | fait (14/10) |
+| API REST | fait (14/10) |
 
 ### Tests
 
-Quatre suites, **27 tests**, aucune base de données requise :
+14 suites, **135 tests**, sans base, sans LLM, sans réseau :
 
 ```bash
-python tests/test_detection.py    # 11  références et codes erreur
-python tests/test_escalade.py     #  4  les 5 règles, référentiel simulé
-python tests/test_ingestion.py    # 10  portée documentaire et nettoyage
-python tests/test_imports.py      #  2  la logique pure s'importe sans psycopg2
+pytest tests/                    # ou chaque fichier : python tests/test_api.py
 ```
 
-`pytest tests/` fonctionne aussi. Ce qui n'est **pas** couvert : le SQL
-lui-même (filtre dur, RRF, requêtes de `escalade.py`) et le chunking.
+| Suite | Ce qu'elle garde |
+|---|---|
+| `test_detection` | références et codes erreur dans le texte libre |
+| `test_escalade` | les 6 règles et leur ordre, référentiel simulé |
+| `test_ingestion` | portée documentaire et nettoyage |
+| `test_imports` | la logique s'importe sans psycopg2, torch ni Docling |
+| `test_verrou` | refus après recherche, bulletin qui prévaut |
+| `test_prompt` | passages, drapeaux, colonne technicien retirée |
+| `test_controle` | citations inventées / internes, fuites chiffrées |
+| `test_referentiel` | réponse tirée du référentiel |
+| `test_repli` | repli référentiel quand le modèle échoue |
+| `test_llm_secours` | essais, modèles de secours, réponses vides ou coupées |
+| `test_config` | lecture du seuil de similarité |
+| `test_api` | contrat HTTP : rien d'interne ne sort, 403 / 422 / 503, profils |
+| `test_comptes` | mots de passe hachés, vérification, suppression |
+| `test_conseiller` | profil conseiller : bulletin cité, colonne technicien gardée |
+
+Non couverts par les tests : le SQL lui-même et le chunking. Ils se vérifient
+sur la base réelle avec `python console.py --questions-types`.
 
 ### Points ouverts
 
-1. Calibrer `SEUIL_SIMILARITE_PROVISOIRE` sur le jeu d'évaluation.
-2. Les tables « codes erreur » des manuels contiennent encore plusieurs codes
-   par chunk (E23 + E31 + E40) — 39 chunks concernés. Le référentiel est propre.
-3. Choix du LLM : couche d'abstraction prévue (Ollama local par défaut,
-   bascule API par variable `.env`).
-4. L'index GIN sur `metadata` n'est pas utilisé par le filtre actuel
-   (`metadata->'modeles_couverts' @> …` n'est pas indexable sous cette forme).
-   Sans effet sur 875 lignes, à reprendre avant l'API.
-5. `connexion()` ne fait jamais de `commit()` : tout passe par `autocommit`.
-   La première écriture via `curseur()` sans autocommit serait perdue en
-   silence. À régler avant FastAPI, avec un pool de connexions.
-6. Le repli plein texte par mots laisse passer les fragments de modèle
-   (`450`) et des mots vides (`plus`). Sans effet sur le rappel, mais le
-   classement `ts_rank_cd` s'en ressent.
+1. **Calibrer `SEUIL_SIMILARITE`** (0.45 provisoire) sur des questions réelles,
+   avec les vrais embeddings BGE-M3.
+2. **Choisir le modèle** : `llama3.2` (3B) est le défaut ; le comparer à un
+   modèle plus gros avec `--modele`.
+3. Le contrôle des fuites porte sur les chiffres : une reformulation sans
+   chiffre d'une procédure interne passe encore.
+4. Un seul code erreur est retenu par question (le premier cité).
+5. Une gamme absente du catalogue (`SL-900`) n'est pas reconnue.

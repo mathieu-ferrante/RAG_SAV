@@ -179,7 +179,9 @@ def decider_generation(reponse_recherche: dict) -> dict:
     #    Avant le seuil de similarité : le bulletin a été retrouvé par le
     #    code exact, sa pertinence ne se discute pas.
     if _bulletin_prevaut(passages):
-        return _refus("bulletin_prevaut")
+        # Les passages sont rendus : repondre() y cherche la ligne du
+        # référentiel pour donner au client la conduite à tenir (14/10).
+        return _refus("bulletin_prevaut", passages)
 
     # 4. Les passages sont du bon appareil, mais aucun ne traite le sujet.
     #    Seuil provisoire (0.45), à recalibrer sur le jeu d'évaluation.
@@ -203,12 +205,12 @@ def decider_generation(reponse_recherche: dict) -> dict:
     }
 
 
-def _refus(motif: str) -> dict:
+def _refus(motif: str, passages: list[dict] | None = None) -> dict:
     return {
         "autorise": False,
         "statut": "escalade" if motif in MOTIFS_ESCALADE else "refus",
         "motif": motif,
         "message": REFUS[motif],
-        "passages": [],
+        "passages": passages or [],
         "citables": [],
     }

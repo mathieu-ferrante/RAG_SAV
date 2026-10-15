@@ -112,3 +112,104 @@ def reponse_directe(analyse: dict, passages: list[dict]) -> dict | None:
             {"nom_fichier": ligne["nom_fichier"], "section_path": ligne["section_path"]}
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Un bulletin INTERNE prévaut — décision du 14/10
+# ---------------------------------------------------------------------------
+
+REQUETE_LIGNE = """
+SELECT page_content, metadata, document_source
+FROM chunks
+WHERE metadata->>'decoupage' = 'atomique'
+  AND metadata->>'code_erreur' = %(code)s
+  AND metadata->'modeles_couverts' @> to_jsonb(%(modele)s::text)
+  AND COALESCE(metadata->>'audience', 'client') = 'client'
+LIMIT 1;
+"""
+
+
+def _ligne_en_base(code: str, modele: str) -> dict | None:
+    """La ligne du référentiel lue directement en base.
+
+    Quand un bulletin prévaut, ses chunks occupent la tête du classement : la
+    ligne du référentiel peut ne pas figurer dans les 5 passages retenus.
+    """
+    from rag_sav.stockage.connexion import curseur
+
+    with curseur() as cur:
+        cur.execute(REQUETE_LIGNE, {"code": code, "modele": modele})
+        ligne = cur.fetchone()
+    if not ligne:
+        return None
+    metadata = ligne["metadata"] or {}
+    return {
+        "page_content": ligne["page_content"],
+        "nom_fichier": metadata.get("nom_fichier", ligne["document_source"]),
+        "section_path": metadata.get("section_path", "Général"),
+        "audience": metadata.get("audience", "client"),
+        "code_erreur": metadata.get("code_erreur"),
+        "modeles_couverts": metadata.get("modeles_couverts") or [],
+        "gamme": metadata.get("gamme"),
+        "prevaut": False,
+        "metadata": metadata,
+    }
+
+
+def reponse_sous_bulletin(analyse: dict, passages: list[dict], lire_base=_ligne_en_base) -> dict | None:
+    """Ce que le client peut lire quand un bulletin interne prévaut.
+
+    Le 12/10, ce cas escaladait sans rien dire : le client qui écrivait « mon
+    WX-500 affiche E52 » n'apprenait même pas ce que signifie le code. Or les
+    deux bulletins du corpus (BT-2026-007, BT-2026-011) ne changent que
+    l'intervention TECHNICIEN ; la conduite client du référentiel reste juste
+    (« Contacter le SAV »), BT-2026-011 l'écrit même en toutes lettres.
+
+    On rend donc la ligne du référentiel, avec trois précautions :
+
+      - la signification est présentée comme « référencée », pas comme un
+        diagnostic : le bulletin montre que la cause réelle peut différer ;
+      - le client est invité à préparer son numéro de série, dont le
+        conseiller a besoin pour appliquer le bulletin ;
+      - rien du bulletin ne sort (ni firmware, ni série 2503, ni pièce).
+
+    Sans ligne de référentiel pour ce code et cet appareil : None, et
+    l'appelant escalade comme avant.
+    """
+    code, modele = analyse.get("code"), analyse.get("modele")
+    if not code or not modele:
+        return None
+
+    ligne = _ligne_du_code(passages, code, modele)
+    if ligne is None and lire_base is not None:
+        candidate = lire_base(code, modele)
+        ligne = _ligne_du_code([candidate], code, modele) if candidate else None
+    if ligne is None:
+        return None
+
+    contenu = ligne.get("page_content") or ""
+    conduite = _champ(contenu, CHAMP_CONDUITE)
+    signification = _champ(contenu, CHAMP_SIGNIFICATION) or (
+        (ligne.get("metadata") or {}).get("signification")
+    )
+
+    entete = f"Le code {code} sur votre appareil {modele}"
+    entete += (
+        f" est référencé dans notre documentation comme : {signification}. "
+        "Seul un diagnostic de notre service après-vente peut en confirmer l'origine."
+        if signification
+        else " nécessite un diagnostic de notre service après-vente."
+    )
+
+    texte = (
+        f"{entete}\n\n{conduite}\n\n"
+        "Une consigne technique plus récente que votre manuel s'applique à ce "
+        "code sur votre appareil : préparez son numéro de série (étiquette "
+        "signalétique), le conseiller vous indiquera la marche à suivre.\n\n"
+        f"Sources :\n- {ligne['nom_fichier']} — {ligne['section_path']}"
+    )
+    return {
+        "texte": texte,
+        "sources": [{"nom_fichier": ligne["nom_fichier"], "section_path": ligne["section_path"]}],
+        "ligne": ligne,
+    }

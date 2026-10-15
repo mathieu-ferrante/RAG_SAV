@@ -36,6 +36,9 @@ CAS = [
     ("rag_sav.generation.prompt", ["psycopg2", "pandas", "docling"]),
     ("rag_sav.generation.llm", ["psycopg2", "sentence_transformers", "torch"]),
     ("rag_sav.generation", ["psycopg2", "sentence_transformers", "torch"]),
+    # L'API : démarrer le serveur ne doit charger la base et le modèle qu'à la
+    # demande (python -m api précharge le modèle explicitement, pas l'import).
+    ("api.routes", ["psycopg2", "sentence_transformers", "torch"]),
 ]
 
 MODELE = (

@@ -48,6 +48,7 @@ SELECT EXISTS (
 
 _cache_referentiel: dict[str, list[str]] | None = None
 _cache_codes_connus: dict[str, bool] = {}
+_cache_codes_appareil: dict[tuple, bool] = {}
 
 
 def codes_referentiel(relire: bool = False) -> dict[str, list[str]]:
@@ -103,11 +104,41 @@ def code_connu(code: str) -> bool:
     return _cache_codes_connus[code]
 
 
+def code_documente_pour_appareil(code: str, analyse: dict) -> bool:
+    """Ce code apparaît-il dans la documentation VISIBLE pour cet appareil ?
+
+    Visible = ce que le filtre dur de la recherche laisse passer pour ce
+    modèle (ou cette gamme), documentation interne comprise. C'est la même
+    clause que `requete.clause_filtre()` : la règle et la recherche voient
+    exactement le même périmètre.
+
+    Mesuré le 12/10 sur les 252 couples modèle × code : les 132 codes d'une
+    autre gamme sont absents de toute la documentation visible, les 120 codes
+    de la gamme y sont tous. La séparation est parfaite, la règle est sûre.
+    """
+    from rag_sav.recherche.requete import clause_filtre
+    from rag_sav.stockage.connexion import curseur
+
+    filtre, parametres = clause_filtre(analyse)
+    cle = (code, analyse.get("modele"), analyse.get("gamme"))
+    if cle not in _cache_codes_appareil:
+        with curseur() as cur:
+            cur.execute(
+                "SELECT EXISTS (SELECT 1 FROM chunks WHERE " + filtre +
+                " AND page_content ~* ('(^|[^a-z0-9])' || %(code)s || '([^a-z0-9]|$)'))"
+                " AS present;",
+                {"code": code, **parametres},
+            )
+            _cache_codes_appareil[cle] = bool(cur.fetchone()["present"])
+    return _cache_codes_appareil[cle]
+
+
 def vider_cache() -> None:
     """À appeler après une réindexation."""
     global _cache_referentiel
     _cache_referentiel = None
     _cache_codes_connus.clear()
+    _cache_codes_appareil.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +213,40 @@ def _code_inconnu(analyse: dict) -> dict | None:
     }
 
 
+def _code_hors_appareil(analyse: dict) -> dict | None:
+    """Le code existe, mais pas pour l'appareil du client (décision du 14/10).
+
+    « Mon WX-450 affiche E15 » : E15 est un code lave-vaisselle. Avant cette
+    règle, la recherche partait quand même, ramenait cinq passages WX-450 dont
+    aucun ne parle de E15, et le LLM était appelé sur un contexte hors sujet.
+    Le contrôle des citations ne pouvait rien y faire : une réponse hors sujet
+    mais bien citée sortait en « repondu ».
+
+    Placée après `_code_inconnu` : un code inconnu partout reçoit le message
+    plus précis. Ne s'applique que si un appareil est identifié (modèle ou
+    gamme) : sans appareil, les deux règles suivantes prennent le relais.
+    """
+    code = analyse["code"]
+    if not code or not (analyse["modele"] or analyse["gamme"]):
+        return None
+    if code_documente_pour_appareil(code, analyse):
+        return None
+
+    appareil = libelle_gamme(analyse["gamme"]).lower()
+    if analyse["modele"]:
+        appareil = f"{appareil} {analyse['modele']}"
+    return {
+        "motif": "code_hors_appareil",
+        "message": (
+            f"Le code {code} ne figure pas dans la documentation de votre "
+            f"{appareil}. Pouvez-vous vérifier le code affiché à l'écran et la "
+            "référence de l'appareil (étiquette signalétique) ? Si les deux "
+            "sont exacts, je transmets votre demande à un conseiller."
+        ),
+        "code_signale": code,
+    }
+
+
 def _code_ambigu_sans_appareil(analyse: dict) -> dict | None:
     """Le code existe, mais ne veut pas dire la même chose selon la gamme."""
     if not analyse["code"] or analyse["modele"] or analyse["gamme"]:
@@ -214,7 +279,7 @@ def _code_sans_appareil(analyse: dict) -> dict | None:
     parier sur la gamme.
 
     Sans cette règle, le filtre dur ne filtre rien : la recherche part sur les
-    1 001 chunks du corpus, toutes gammes confondues.
+    875 chunks du corpus, toutes gammes confondues.
     """
     if not analyse["code"] or analyse["modele"] or analyse["gamme"]:
         return None
@@ -235,6 +300,7 @@ REGLES = (
     _plusieurs_modeles,
     _reference_inconnue,
     _code_inconnu,
+    _code_hors_appareil,
     _code_ambigu_sans_appareil,
     _code_sans_appareil,
 )

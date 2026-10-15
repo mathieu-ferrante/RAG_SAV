@@ -116,6 +116,10 @@ def _parts(passage: dict) -> tuple[str, str]:
     test du 12/10 : « 44-3311 » passait comme information client).
     """
     texte = passage.get("page_content") or ""
+    if "audience_origine" in passage:
+        # Profil conseiller (generation._ouvrir_au_conseiller) : toute la
+        # documentation lui est destinée, colonne technicien comprise.
+        return texte, ""
     if passage.get("audience", "client") != "client":
         return "", texte
     reserve = "\n".join(m.group(0) for m in MOTIF_CHAMP_TECHNICIEN.finditer(texte))

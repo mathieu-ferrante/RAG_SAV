@@ -17,7 +17,7 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE))
 
-from rag_sav.generation.referentiel import reponse_directe  # noqa: E402
+from rag_sav.generation.referentiel import reponse_directe, reponse_sous_bulletin  # noqa: E402
 
 # Recopié caractère pour caractère depuis data/output/chunk.
 CONTENU_E23_LV = """Document: Referentiel_codes_erreur.xlsx
@@ -86,6 +86,54 @@ def test_un_bulletin_qui_fait_autorite_rend_la_main_au_llm():
     """Le cas E52 / WX-500 : le bulletin prévaut, ce raccourci ne sait pas arbitrer."""
     bulletin = dict(MANUEL, nom_fichier="BT-2026-007.docx", audience="interne", prevaut=True)
     assert reponse_directe(ANALYSE, [LIGNE_REFERENTIEL, bulletin]) is None
+
+
+# --- Bulletin interne qui prévaut (14/10) ----------------------------------
+
+CONTENU_E52_WX = """Document: Referentiel_codes_erreur.xlsx
+Appareil: Lave-linge — gamme WX
+Section: Code E52
+
+# Référentiel des codes erreur — Lave-linge serie WX
+## Code E52 — Sonde de température de lavage défectueuse
+- **Gamme :** WX (Lave-linge)
+- **Modèles concernés :** WX-300, WX-350, WX-400, WX-450, WX-500, WX-550
+- **Signification :** Sonde de température de lavage défectueuse
+- **Conduite à tenir (client) :** Contacter le SAV. L'appareil peut continuer a laver a froid en attendant l'intervention.
+- **Intervention SAV (technicien) :** Remplacer la sonde CTN (pièce 44-3311).
+*Version 2025-T4 (arrêtée au 15 décembre 2025) — maintenu par le bureau d'études*"""
+
+LIGNE_E52 = dict(
+    LIGNE_REFERENTIEL, section_path="Code E52", page_content=CONTENU_E52_WX, code_erreur="E52",
+    modeles_couverts=["WX-300", "WX-350", "WX-400", "WX-450", "WX-500", "WX-550"],
+    metadata={"decoupage": "atomique", "code_erreur": "E52"},
+)
+BT_007 = dict(MANUEL, nom_fichier="BT-2026-007.docx", audience="interne", prevaut=True,
+              page_content="Pour tout code E52 sur WX-500 : firmware 4.2, séries 2503.")
+ANALYSE_E52 = {"code": "E52", "modele": "WX-500", "gamme": "WX"}
+
+
+def test_sous_bulletin_rend_la_conduite_client():
+    rendu = reponse_sous_bulletin(ANALYSE_E52, [BT_007, LIGNE_E52], lire_base=None)
+    assert "Contacter le SAV" in rendu["texte"]
+    assert "numéro de série" in rendu["texte"]
+    assert "Referentiel_codes_erreur.xlsx — Code E52" in rendu["texte"]
+
+
+def test_sous_bulletin_rien_du_bulletin_ni_du_technicien():
+    texte = reponse_sous_bulletin(ANALYSE_E52, [BT_007, LIGNE_E52], lire_base=None)["texte"]
+    for interdit in ("BT-", "firmware", "2503", "44-3311", "CTN", "bulletin", "technicien"):
+        assert interdit not in texte, interdit
+
+
+def test_sous_bulletin_va_chercher_la_ligne_en_base():
+    """Les chunks du bulletin occupent la tête : la ligne peut manquer au top 5."""
+    rendu = reponse_sous_bulletin(ANALYSE_E52, [BT_007], lire_base=lambda code, modele: LIGNE_E52)
+    assert rendu and rendu["sources"][0]["section_path"] == "Code E52"
+
+
+def test_sous_bulletin_sans_ligne_laisse_escalader():
+    assert reponse_sous_bulletin(ANALYSE_E52, [BT_007], lire_base=lambda code, modele: None) is None
 
 
 def test_modele_hors_de_la_ligne_ne_repond_pas():

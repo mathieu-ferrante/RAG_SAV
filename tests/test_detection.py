@@ -12,7 +12,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from rag_sav.catalogue import (  # noqa: E402
-    extraire_codes_erreur,
     extraire_references,
     normaliser_code_erreur,
     normaliser_modele,

@@ -46,8 +46,6 @@ GAMMES: dict[str, dict] = {
     },
 }
 
-TOUS_LES_MODELES: list[str] = [m for g in GAMMES.values() for m in g["modeles"]]
-
 _GAMME_PAR_MODELE: dict[str, str] = {
     modele: code for code, gamme in GAMMES.items() for modele in gamme["modeles"]
 }

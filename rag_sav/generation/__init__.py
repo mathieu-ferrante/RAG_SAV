@@ -7,7 +7,8 @@
        │
        ├─ decider_generation()  le contexte ramené est-il exploitable ?
        │                        ↳ non : statut « refus », le LLM n'est pas appelé
-       │                        ↳ bulletin interne prévaut : statut « escalade »
+       │                        ↳ bulletin interne prévaut : conduite client du
+       │                          référentiel + numéro de série (sinon « escalade »)
        │
        ├─ referentiel.reponse_directe()  OPTIONNEL (REPONSE_DIRECTE_REFERENTIEL=1)
        │                        ↳ le référentiel couvre code+appareil : réponse sans LLM
@@ -95,22 +96,52 @@ def _enveloppe(recherche: dict, statut: str, message: str, motif: str | None = N
     }
 
 
+PROFILS = ("client", "conseiller")
+
+
+def _ouvrir_au_conseiller(passages: list[dict]) -> list[dict]:
+    """Profil conseiller : toute la documentation devient citable.
+
+    L'audience d'origine est conservée à part (`audience_origine`) : le prompt
+    continue de signaler l'interne, mais le verrou, le prompt et le contrôle
+    le traitent comme citable. Conséquences, voulues :
+      - un bulletin qui prévaut n'escalade plus, il est cité ;
+      - « aucune_source_citable », « citation_interne » et « fuite_interne »
+        ne peuvent plus se déclencher ;
+      - la colonne technicien du référentiel reste dans le contexte.
+    """
+    return [
+        {**p, "audience": "client", "audience_origine": p.get("audience", "client")}
+        for p in passages
+    ]
+
+
 def repondre(
     question: str,
     top_k: int | None = None,
     modele: str | None = None,
     fournisseur: str | None = None,
     url: str | None = None,
+    profil: str = "client",
 ) -> dict:
-    """Répond à une question client, ou explique pourquoi elle n'est pas traitée.
+    """Répond à une question, ou explique pourquoi elle n'est pas traitée.
 
-    `modele` / `fournisseur` / `url` ne servent qu'au benchmark : laissés à
-    None, tout vient du `.env` via `config.py`.
+    `profil` : « client » (défaut, rien d'interne ne sort) ou « conseiller »
+    (toute la documentation est citable). `modele` / `fournisseur` / `url` ne
+    servent qu'au benchmark : laissés à None, tout vient du `.env`.
     """
+    if profil not in PROFILS:
+        raise ValueError(f"Profil inconnu : {profil!r} (attendu : {', '.join(PROFILS)})")
+    resultat = _repondre(question, top_k, modele, fournisseur, url, profil)
+    resultat["profil"] = profil
+    return resultat
+
+
+def _repondre(question, top_k, modele, fournisseur, url, profil) -> dict:
     from rag_sav.generation import controle as mod_controle
     from rag_sav.generation import prompt as mod_prompt
     from rag_sav.generation.llm import ErreurLLM, generer
-    from rag_sav.generation.referentiel import reponse_directe
+    from rag_sav.generation.referentiel import reponse_directe, reponse_sous_bulletin
     from rag_sav.generation.verrou import decider_generation
     from rag_sav.recherche import rechercher
 
@@ -125,8 +156,26 @@ def repondre(
             recherche["escalade"]["motif"],
         )
 
+    if profil == "conseiller":
+        recherche = {**recherche, "resultats": _ouvrir_au_conseiller(recherche.get("resultats") or [])}
+
     # 2. Le contexte ramené est-il exploitable ? (verrou.py)
     decision = decider_generation(recherche)
+    if not decision["autorise"] and decision["motif"] == "bulletin_prevaut":
+        # Un bulletin interne prévaut : le client lit quand même la
+        # conduite à tenir du référentiel, plus l'invitation à préparer son
+        # numéro de série (décision du 14/10). Contrôlée comme une réponse
+        # du modèle : la moindre fuite interne et l'on escalade.
+        sous_bulletin = reponse_sous_bulletin(recherche["analyse"], decision["passages"])
+        if sous_bulletin:
+            lus = decision["passages"] + [sous_bulletin["ligne"]]
+            if mod_controle.verifier(sous_bulletin["texte"], lus, question)["conforme"]:
+                enveloppe = _enveloppe(
+                    recherche, "repondu", sous_bulletin["texte"], "referentiel_sous_bulletin"
+                )
+                enveloppe["sources"] = sous_bulletin["sources"]
+                enveloppe["passages"] = decision["passages"]
+                return enveloppe
     if not decision["autorise"]:
         return _enveloppe(
             recherche, decision.get("statut", "refus"), decision["message"], decision["motif"]
@@ -149,7 +198,7 @@ def repondre(
         enveloppe["passages"] = passages
         return enveloppe
 
-    messages = mod_prompt.construire(question, passages, recherche["analyse"])
+    messages = mod_prompt.construire(question, passages, recherche["analyse"], profil)
 
     # 4. Génération. Une panne du LLM est un incident d'exploitation, pas une
     #    erreur à afficher au client.

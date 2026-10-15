@@ -72,6 +72,44 @@ faire. Pas de formule d'accueil, pas de résumé de la question. Dix lignes au \
 plus, puis le bloc « Sources : »."""
 
 
+# Profil « conseiller » (API avec compte, console --conseiller) : la même
+# rigueur de citation, mais toute la documentation est citable et la réponse
+# s'adresse à un professionnel. Les règles 1, 2 et 4 du client sont reprises
+# mot pour mot : seules changent la cible et la place de l'interne.
+SYSTEME_CONSEILLER = """Tu es l'assistant interne du service après-vente \
+d'Electrodomus, fabricant de lave-linge (gamme WX), lave-vaisselle (gamme LV) \
+et fours encastrables (gamme FR). Tu réponds à un CONSEILLER SAV, pas au client.
+
+RÈGLES ABSOLUES, dans cet ordre de priorité :
+
+1. FONDER. Tu réponds EXCLUSIVEMENT avec le contenu des passages numérotés \
+fournis ci-dessous. Tu n'ajoutes aucune connaissance générale sur \
+l'électroménager, aucune cause probable, aucune manipulation qui ne soit pas \
+écrite dans un passage. Si les passages ne suffisent pas, tu le dis.
+
+2. CITER. Tu termines toujours par un bloc « Sources : », une ligne par \
+passage réellement utilisé. Chaque ligne est un tiret suivi de la ligne \
+« SOURCE AUTORISÉE » du passage, RECOPIÉE CARACTÈRE POUR CARACTÈRE — accents, \
+tirets et extension du fichier compris. Tu n'inventes aucun nom de fichier. \
+La documentation interne (bulletins, procédures SAV) se cite comme le reste.
+
+3. AUTORITÉ. Un passage marqué [FAIT AUTORITÉ] est un bulletin technique \
+récent : il prévaut sur un manuel ou sur le référentiel pour ce qu'il traite. \
+Quand il change la conduite à tenir, donne la conduite du bulletin et signale \
+que le manuel ou le référentiel est dépassé sur ce point.
+
+4. RESTER SUR L'APPAREIL. Un même code erreur n'a pas le même sens selon \
+l'appareil. Tu ne transposes jamais une procédure d'une gamme à une autre.
+
+5. DISTINGUER. Sépare ce que le conseiller dit ou fait faire au client de ce \
+qui relève du technicien (contrôles, références de pièces).
+
+FORME : style de note interne, direct, sans formule d'accueil. Commence par \
+la conduite à tenir en une ou deux phrases. Puis, si utile, « Côté client : » \
+et « Côté technicien : », chacun en étapes numérotées. Quinze lignes au plus, \
+puis le bloc « Sources : »."""
+
+
 CONSIGNE_PLUSIEURS_GAMMES = """
 
 CONSIGNE PARTICULIÈRE : le client n'a pas indiqué son appareil, et les passages \
@@ -97,7 +135,7 @@ RAPPEL : réponse en français, la réponse d'abord, puis le bloc « Sources : �
 avec les lignes autorisées recopiées telles quelles."""
 
 
-def corps_du_passage(passage: str) -> str:
+def corps_du_passage(passage: str, garder_technicien: bool = False) -> str:
     """Retire l'en-tête injecté à l'ingestion (Document / Appareil / Section).
 
     Il est utile en base — il rend les 60 % de chunks dupliqués un peu moins
@@ -111,7 +149,8 @@ def corps_du_passage(passage: str) -> str:
     # colonne technicien (références de pièces) ne doit même pas entrer dans
     # son contexte. `controle.py` reste là pour vérifier, mais mieux vaut ne
     # pas lui laisser de quoi s'égarer.
-    passage = MOTIF_CHAMP_TECHNICIEN.sub("", passage)
+    if not garder_technicien:
+        passage = MOTIF_CHAMP_TECHNICIEN.sub("", passage)
     if not passage.startswith("Document:"):
         return passage.strip()
     _, separateur, reste = passage.partition("\n\n")
@@ -121,7 +160,10 @@ def corps_du_passage(passage: str) -> str:
 def _drapeaux(resultat: dict, appareil: str | None) -> str:
     marques = []
 
-    if resultat.get("audience") == "client":
+    if resultat.get("audience_origine", "client") != "client":
+        # Profil conseiller : l'interne est citable, mais il reste signalé.
+        marques.append("documentation INTERNE (conseillers, techniciens)")
+    elif resultat.get("audience") == "client":
         marques.append("document client")
     else:
         marques.append("INTERNE — à lire, jamais à citer")
@@ -156,7 +198,9 @@ def sources_autorisees(passages: list[dict]) -> list[str]:
     ]
 
 
-def formater_contexte(passages: list[dict], appareil: str | None = None) -> str:
+def formater_contexte(
+    passages: list[dict], appareil: str | None = None, conseiller: bool = False
+) -> str:
     """Les passages, numérotés, avec l'en-tête que le LLM doit recopier."""
     blocs = []
     for numero, resultat in enumerate(passages, start=1):
@@ -172,7 +216,7 @@ def formater_contexte(passages: list[dict], appareil: str | None = None) -> str:
             f"[{numero}] {etiquette} : "
             f"{resultat['nom_fichier']} — {resultat['section_path']}\n"
             f"({_drapeaux(resultat, appareil)})\n"
-            f"{corps_du_passage(resultat['page_content'])}"
+            f"{corps_du_passage(resultat['page_content'], garder_technicien=conseiller)}"
         )
     return "\n\n---\n\n".join(blocs)
 
@@ -185,7 +229,9 @@ def _appareil(analyse: dict) -> str | None:
     return None
 
 
-def construire(question: str, passages: list[dict], analyse: dict) -> list[dict]:
+def construire(
+    question: str, passages: list[dict], analyse: dict, profil: str = "client"
+) -> list[dict]:
     """Les deux messages envoyés au modèle.
 
     L'appareil et le code sont répétés en clair dans le message utilisateur :
@@ -200,7 +246,8 @@ def construire(question: str, passages: list[dict], analyse: dict) -> list[dict]
     gammes = sorted({p["gamme"] for p in passages if p.get("gamme")})
     plusieurs_gammes = not analyse.get("modele") and not analyse.get("gamme") and len(gammes) > 1
 
-    entete = [f"Question du client : {question}"]
+    conseiller = profil == "conseiller"
+    entete = [f"Question du {'conseiller' if conseiller else 'client'} : {question}"]
     if appareil:
         entete.append(f"Appareil identifié : {appareil}")
     else:
@@ -211,17 +258,17 @@ def construire(question: str, passages: list[dict], analyse: dict) -> list[dict]
     utilisateur = (
         "\n".join(entete)
         + "\n\nPASSAGES DE LA DOCUMENTATION :\n\n"
-        + formater_contexte(passages, appareil)
+        + formater_contexte(passages, appareil, conseiller)
         + "\n\n---\n\nSOURCES AUTORISÉES — tu ne peux citer que ces lignes, "
         + "recopiées exactement :\n"
         + ("\n".join(f"- {ligne}" for ligne in autorisees) or "- (aucune)")
-        + "\n\nRéponds au client en appliquant les règles absolues."
+        + f"\n\nRéponds au {'conseiller' if conseiller else 'client'} en appliquant les règles absolues."
         + (CONSIGNE_PLUSIEURS_GAMMES.format(gammes=", ".join(gammes)) if plusieurs_gammes else "")
         + (RAPPEL_APPAREIL_VERIFIE if appareil and analyse.get("modele") else "")
         + RAPPEL_FINAL
     )
 
     return [
-        {"role": "system", "content": SYSTEME},
+        {"role": "system", "content": SYSTEME_CONSEILLER if conseiller else SYSTEME},
         {"role": "user", "content": utilisateur},
     ]

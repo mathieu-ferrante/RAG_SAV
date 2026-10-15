@@ -140,7 +140,7 @@ def test_bulletin_interne_qui_prevaut_escalade():
     assert decision["autorise"] is False
     assert decision["motif"] == "bulletin_prevaut"
     assert decision["statut"] == "escalade"
-    assert decision["passages"] == []
+    assert decision["passages"], "repondre() y cherche la ligne du référentiel"
     assert "numéro de série" in decision["message"]
 
 

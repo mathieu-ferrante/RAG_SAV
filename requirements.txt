@@ -18,3 +18,11 @@ torch>=2.0.0
 # --- Base de données & environnement ---
 psycopg2-binary>=2.9.0
 python-dotenv>=1.0.0
+
+# --- API REST ---
+fastapi>=0.110.0
+uvicorn>=0.29.0
+
+# --- Tests (facultatif : chaque suite tourne aussi avec `python tests/...`) ---
+httpx>=0.27.0
+pytest>=8.0.0
